@@ -49,3 +49,18 @@ def _to_spec(sectionClasses, parent, depth, main):
             section.__setitem__(paramName, paramType)
 
     return parent
+
+def lift(sectionClasses, configObject):
+    classes = {sc.__name__: sc for sc in sectionClasses if typing_inspect.get_origin(sc) is None}
+    matches = [klass(**attrs) for (name, attrs) in configObject.items() if (klass := classes.get( name )) is not None]
+
+    listClasses = [typing_inspect.get_args(sc)[0]for sc in sectionClasses if typing_inspect.get_origin(sc) == list]
+
+    if len (listClasses) == 0:
+        return matches
+    elif len (listClasses) > 1:
+        raise Exception(f'Can only handle one list per section but given {listClasses}')
+    else:
+        listClass = listClasses[0]
+        rest = [listClass(**{'_name': name} | vals) for (name, vals) in configObject.items() if classes.get( name ) is None]
+        return matches + rest

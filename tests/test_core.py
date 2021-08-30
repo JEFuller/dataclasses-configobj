@@ -79,3 +79,31 @@ class CoreTestCase(unittest.TestCase):
 
         spec = core.to_spec([Parent, List[Child]])
         self.assertEqual(expectedSpec, spec.write())
+
+    def test_lift(self):
+
+        @dataclass
+        class Parent:
+            other: str
+
+        @dataclass
+        class Child:
+            _name: str
+            val: str
+
+        infile = list(map(str.strip, """\
+        [Parent]
+        other = hello
+        [one]
+        val = apple
+        [two]
+        val = banana\
+        """.split('\n')))
+
+        expectedConfig = [Parent('hello'), Child('one', 'apple'), Child('two', 'banana')]
+
+        spec = core.to_spec([Parent, List[Child]])
+
+        root = configobj.ConfigObj(infile=infile, configspec=spec)
+        config = core.lift([Parent, List[Child]], root)
+        self.assertEqual(expectedConfig, config)

@@ -118,6 +118,31 @@ class CoreTestCase(unittest.TestCase):
         spec = core.to_spec(Config)
         self.assertEqual(expectedSpec, spec.write())
 
+    def test_to_spec_4(self):
+
+        @dataclass
+        class OneOfMany:
+            _name: str
+            val: str
+
+        @dataclass
+        class Wrapper:
+            _many: List[OneOfMany]
+
+        @dataclass
+        class Config:
+            wrapper: Wrapper
+
+        expectedSpec = list(map(str.strip, """\
+        [wrapper]
+        [[__many__]]
+        val = string\
+        """.split('\n')))
+
+        spec = core.to_spec(Config)
+        self.assertEqual(expectedSpec, spec.write())
+
+
     def test_type(self):
         T = TypeVar('T')
 
@@ -131,7 +156,7 @@ class CoreTestCase(unittest.TestCase):
 
         self.assertEqual(doit(Parent).other, 'test')
 
-    def test_lift(self):
+    def test_lift_1(self):
 
         @dataclass
         class Single:
@@ -162,6 +187,43 @@ class CoreTestCase(unittest.TestCase):
                 OneOfMany(_name = 'one', val = 'apple'),
                 OneOfMany(_name = 'two', val = 'banana')
             ]
+        )
+
+        spec = core.to_spec(Config)
+        root = configobj.ConfigObj(infile=infile, configspec=spec)
+        config = core.lift(Config, root)
+        self.assertEqual(expectedConfig, config)
+
+    def test_lift_2(self):
+
+        @dataclass
+        class OneOfMany:
+            _name: str
+            val: str
+
+        @dataclass
+        class Wrapper:
+            _many: List[OneOfMany]
+
+        @dataclass
+        class Config:
+            wrapper: Wrapper
+
+        infile = list(map(str.strip, """\
+        [wrapper]
+        [[one]]
+        val = apple
+        [[two]]
+        val = banana\
+        """.split('\n')))
+
+        expectedConfig = Config(
+            wrapper=Wrapper(
+            _many=[
+                OneOfMany(_name = 'one', val = 'apple'),
+                OneOfMany(_name = 'two', val = 'banana')
+            ]
+            )
         )
 
         spec = core.to_spec(Config)

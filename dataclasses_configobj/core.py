@@ -34,9 +34,9 @@ def _to_spec(classParam, parent, depth, main):
 
         paramType = types.get(param.annotation)
         if paramType is None:
-            raise Exception(f'Unsupported type: {param.annotation}')
-
-        section.__setitem__(paramName, paramType)
+            _to_spec(param, section, depth+1, main)
+        else:
+            section.__setitem__(paramName, paramType)
 
     return parent
 

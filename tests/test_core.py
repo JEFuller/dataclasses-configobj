@@ -1,12 +1,36 @@
-from typing import List
+from typing import Callable, Dict, List, Type, TypeVar
 import unittest
 from dataclasses import dataclass
 
 import configobj
+import validate
 from dataclasses_configobj import core
 
 
 class CoreTestCase(unittest.TestCase):
+    def test_config(self):
+        spec = list(map(str.strip, """\
+        [foo]
+        bar = string
+        pip = integer\
+        """.split('\n')))
+
+        infile = list(map(str.strip, """\
+        [foo]
+        bar = one
+        pip = 1\
+        """.split('\n')))
+
+        root = configobj.ConfigObj(infile=infile, configspec=spec)
+        vtor = validate.Validator()
+        res = root.validate(vtor, preserve_errors=True)
+        self.assertEqual(res, True)
+
+        foo = root['foo']
+        self.assertIsNotNone(foo)
+        self.assertEqual(foo['bar'], 'one')
+        self.assertEqual(foo['pip'], 1)
+
     def test_to_spec_1(self):
 
         @dataclass
@@ -14,20 +38,24 @@ class CoreTestCase(unittest.TestCase):
             bar: str
             pip: int
 
+        @dataclass
+        class Config:
+            foo: Foo
+
         expectedSpec = list(map(str.strip, """\
-        [Foo]
+        [foo]
         bar = string
         pip = integer\
         """.split('\n')))
 
         root = configobj.ConfigObj()
         foo = configobj.Section(root, 1, root)
-        root['Foo'] = foo
+        root['foo'] = foo
         foo.__setitem__('bar', 'string')
         foo.__setitem__('pip', 'integer')
         self.assertEqual(expectedSpec, root.write())
 
-        spec = core.to_spec(Foo)
+        spec = core.to_spec(Config)
         self.assertEqual(expectedSpec, spec.write())
 
     def test_to_spec_2(self):
@@ -40,59 +68,87 @@ class CoreTestCase(unittest.TestCase):
         class Bar:
             b: int
 
+        @dataclass
+        class Config:
+            foo: Foo
+            bar: Bar
+
         expectedSpec = list(map(str.strip, """\
-        [Foo]
+        [foo]
         a = string
-        [Bar]
+        [bar]
         b = integer\
         """.split('\n')))
 
         root = configobj.ConfigObj()
         foo = configobj.Section(root, 1, root)
-        root['Foo'] = foo
+        root['foo'] = foo
         foo.__setitem__('a', 'string')
         bar = configobj.Section(root, 1, root)
-        root['Bar'] = bar
+        root['bar'] = bar
         bar.__setitem__('b', 'integer')
         self.assertEqual(expectedSpec, root.write())
 
-        spec = core.to_spec([Foo, Bar])
+        spec = core.to_spec(Config)
         self.assertEqual(expectedSpec, spec.write())
 
     def test_to_spec_3(self):
 
         @dataclass
-        class Parent:
+        class Single:
             other: str
 
         @dataclass
-        class Child:
+        class OneOfMany:
             _name: str
             val: str
 
+        @dataclass
+        class Config:
+            single: Single
+            _many: List[OneOfMany]
+
         expectedSpec = list(map(str.strip, """\
-        [Parent]
+        [single]
         other = string
         [__many__]
         val = string\
         """.split('\n')))
 
-        spec = core.to_spec([Parent, List[Child]])
+        spec = core.to_spec(Config)
         self.assertEqual(expectedSpec, spec.write())
 
-    def test_lift(self):
+    def test_type(self):
+        T = TypeVar('T')
+
+        def doit(klass: Type[T]) -> T:
+            vars = {'other': 'test'}
+            return klass(**vars)
 
         @dataclass
         class Parent:
             other: str
 
+        self.assertEqual(doit(Parent).other, 'test')
+
+    def test_lift(self):
+
         @dataclass
-        class Child:
+        class Single:
+            other: str
+
+        @dataclass
+        class OneOfMany:
             _name: str
             val: str
 
+        @dataclass
+        class Config:
+            single: Single
+            _many: List[OneOfMany]
+
         infile = list(map(str.strip, """\
-        [Parent]
+        [single]
         other = hello
         [one]
         val = apple
@@ -100,10 +156,15 @@ class CoreTestCase(unittest.TestCase):
         val = banana\
         """.split('\n')))
 
-        expectedConfig = [Parent('hello'), Child('one', 'apple'), Child('two', 'banana')]
+        expectedConfig = Config(
+            single=Single(other = 'hello'),
+            _many=[
+                OneOfMany(_name = 'one', val = 'apple'),
+                OneOfMany(_name = 'two', val = 'banana')
+            ]
+        )
 
-        spec = core.to_spec([Parent, List[Child]])
-
+        spec = core.to_spec(Config)
         root = configobj.ConfigObj(infile=infile, configspec=spec)
-        config = core.lift([Parent, List[Child]], root)
+        config = core.lift(Config, root)
         self.assertEqual(expectedConfig, config)

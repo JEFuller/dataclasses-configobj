@@ -1,66 +1,62 @@
 from inspect import signature
-from typing import List
+from typing import List, Type, TypeVar
 
 import configobj
 import typing_inspect
 from configobj import ConfigObj
 
+import dataclasses_configobj.util as util
 
-def to_spec(sections):
-    sections = [sections] if not isinstance(sections, List) else sections
 
+def to_spec(klass):
     root = ConfigObj()
-    _to_spec(sections, root, 1, root)
+
+    classParams = signature(klass).parameters.values()
+    for classParam in classParams:
+        _to_spec(classParam, root, 1, root)
+
     return root
 
+def _to_spec(classParam, parent, depth, main):
+    name = '__many__' if classParam.name == '_many' else classParam.name
+    section = configobj.Section(parent, depth, main)
+    parent[name] = section
 
-def _to_spec(sectionClasses, parent, depth, main):
-    for sectionClass in sectionClasses:
-        section = configobj.Section(parent, depth, main)
+    klass = util.list_type(classParam) if classParam.name == '_many' else classParam.annotation 
+    params = [p for p in signature(klass).parameters.items() if p[0] != '_name']
 
-        origin = typing_inspect.get_origin(sectionClass)
-        if origin == list:
-            name = '__many__'
-            isList = True
-            sectionClass = typing_inspect.get_args(sectionClass)[0]
-        elif origin == None:
-            name = sectionClass.__name__
-            isList = False
-        else:
-            raise Exception(f'Unsupported type: {origin}')
+    for paramName, param in params:
+        # Based on https://github.com/DiffSK/configobj/blob/v5.0.6//validate.py#L1250
+        types = {
+            str: 'string',
+            int: 'integer'
+        }
 
-        parent[name] = section
+        paramType = types.get(param.annotation)
+        if paramType is None:
+            raise Exception(f'Unsupported type: {param.annotation}')
 
-        sig = signature(sectionClass)
-        items = sig.parameters.items()
-        for paramName, param in items:
-            if isList and paramName == '_name':
-                continue
-
-            paramType = param.annotation.__name__
-
-            if paramType == 'str':
-                paramType = 'string'
-            elif paramType == 'int':
-                paramType = 'integer'
-            else:
-                raise Exception(f'Unsupported type: {name}')
-
-            section.__setitem__(paramName, paramType)
+        section.__setitem__(paramName, paramType)
 
     return parent
 
-def lift(sectionClasses, configObject):
-    classes = {sc.__name__: sc for sc in sectionClasses if typing_inspect.get_origin(sc) is None}
-    matches = [klass(**attrs) for (name, attrs) in configObject.items() if (klass := classes.get( name )) is not None]
+T = TypeVar('T')
 
-    listClasses = [typing_inspect.get_args(sc)[0]for sc in sectionClasses if typing_inspect.get_origin(sc) == list]
+def lift(klass: Type[T], configObject) -> T:
+    params = list(signature(klass).parameters.values())
+    config = configObject.items()
 
-    if len (listClasses) == 0:
-        return matches
-    elif len (listClasses) > 1:
-        raise Exception(f'Can only handle one list per section but given {listClasses}')
+    # explicit are those which are not _many
+    explicitClasses = {name: p.annotation for p in params if (name := p.name) != '_many'}
+    explicitMatches = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := explicitClasses.get( name ))}
+
+    manyClasses = [ util.list_type(p) for p in params if p.name == '_many'  ]
+
+    if len (manyClasses) == 0:
+        return klass(**explicitMatches)
+    elif len (manyClasses) > 1:
+        raise Exception(f'Can only handle one list per section, but given {manyClasses}')
     else:
-        listClass = listClasses[0]
-        rest = [listClass(**{'_name': name} | vals) for (name, vals) in configObject.items() if classes.get( name ) is None]
-        return matches + rest
+        manyClass = manyClasses[0]
+        rest = [manyClass(**{'_name': name} | attrs) for (name, attrs) in config if not explicitClasses.get( name )]
+        return klass(**(explicitMatches | { '_many': rest }))

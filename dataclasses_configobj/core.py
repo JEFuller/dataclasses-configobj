@@ -1,11 +1,18 @@
 from inspect import signature
-from typing import List, Type, TypeVar
+from typing import List, Literal, Type, TypeVar
 
 import configobj
 import typing_inspect
 from configobj import ConfigObj
 
 import dataclasses_configobj.util as util
+
+# Based on https://github.com/DiffSK/configobj/blob/v5.0.6//validate.py#L1250
+TYPES = {
+    str: 'string',
+    int: 'integer'
+}
+
 
 
 def to_spec(klass):
@@ -26,13 +33,7 @@ def _to_spec(classParam, parent, depth, main):
     params = [p for p in signature(klass).parameters.items() if p[0] != '_name']
 
     for paramName, param in params:
-        # Based on https://github.com/DiffSK/configobj/blob/v5.0.6//validate.py#L1250
-        types = {
-            str: 'string',
-            int: 'integer'
-        }
-
-        paramType = types.get(param.annotation)
+        paramType = TYPES.get(param.annotation)
         if paramType is None:
             _to_spec(param, section, depth+1, main)
         else:
@@ -46,17 +47,19 @@ def lift(klass: Type[T], configObject) -> T:
     params = list(signature(klass).parameters.values())
     config = configObject.items()
 
-    # explicit are those which are not _many
-    explicitClasses = {name: p.annotation for p in params if (name := p.name) != '_many'}
-    explicitMatches = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := explicitClasses.get( name ))}
+    leafs = {p.name: p.annotation for p in params if p.name != '_many' and not util.has_generic_parameters(p.annotation)}
+    nested = { p.name: p.annotation for p in params if util.has_generic_parameters(p.annotation) }
+    manys = [ util.list_type(p) for p in params if p.name == '_many'  ]
 
-    manyClasses = [ util.list_type(p) for p in params if p.name == '_many'  ]
-
-    if len (manyClasses) == 0:
-        return klass(**explicitMatches)
-    elif len (manyClasses) > 1:
-        raise Exception(f'Can only handle one list per section, but given {manyClasses}')
+    leafMatches = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := leafs.get( name ))}
+    if len(manys) > 1:
+        raise Exception(f'Can only handle one list per section, but given {manys}')
+    elif len(manys) == 1:
+        manyClass = manys[0]
+        manyMatches = [manyClass(**{'_name': name} | attrs) for (name, attrs) in config if not leafs.get( name )]
     else:
-        manyClass = manyClasses[0]
-        rest = [manyClass(**{'_name': name} | attrs) for (name, attrs) in config if not explicitClasses.get( name )]
-        return klass(**(explicitMatches | { '_many': rest }))
+        manyMatches = []
+
+    nestedMatches = {name: lift(klass_, section) for (name, section) in config if (klass_ := nested.get( name ))}
+
+    return klass(**(leafMatches | nestedMatches | ({ '_many': manyMatches } if len(manyMatches) > 0 else {})))

@@ -1,8 +1,8 @@
-from inspect import signature
-from typing import List, Literal, Type, TypeVar
+from dataclasses import dataclass, field
+from inspect import Parameter, signature
+from typing import Optional, Type, TypeVar
 
 import configobj
-import typing_inspect
 from configobj import ConfigObj
 
 import dataclasses_configobj.util as util
@@ -12,7 +12,6 @@ TYPES = {
     str: 'string',
     int: 'integer'
 }
-
 
 
 def to_spec(klass):
@@ -47,23 +46,38 @@ def lift(klass: Type[T], configObject) -> T:
     params = list(signature(klass).parameters.values())
     config = configObject.items()
 
-    notMany = [p for p in params if p.name != '_many']
-    leafsBuiltin = {p.name: p.annotation for p in notMany if util.is_builtin(p.annotation)}
-    leafsClass = {p.name: p.annotation for p in notMany if not util.is_builtin(p.annotation) and not util.has_generic_parameters(p.annotation)}
-    nested = { p.name: p.annotation for p in params if util.has_generic_parameters(p.annotation) }
-    manys = [ util.list_type(p) for p in params if p.name == '_many'  ]
+    @dataclass
+    class Nodes:
+        builtin: dict = field(default_factory= dict)
+        classes: dict = field(default_factory=dict)
+        nested: dict = field(default_factory=dict)
+        many: Optional[Type] = None
 
-    leafBuiltinMatches = {name: klass_(attrs) for (name, attrs) in config if (klass_ := leafsBuiltin.get( name ))}
-    leafClassMatches = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := leafsClass.get( name ))}
+        def add(self, p: Parameter):
+            name = p.name
+            annotation = p.annotation
+            if name == '_many':
+                if self.many:
+                    raise Exception(f'Can only handle one List per section, but given {self.many} and {annotation}')
+                self.many = util.list_type(p)
+            elif util.is_builtin(annotation):
+                self.builtin[name] = annotation
+            elif not util.has_generic_parameters(annotation):
+                self.classes[name] = annotation
+            else:
+                self.nested[name] = annotation
 
-    if len(manys) > 1:
-        raise Exception(f'Can only handle one list per section, but given {manys}')
-    elif len(manys) == 1:
-        manyClass = manys[0]
-        manyMatches = [manyClass(**{'_name': name} | attrs) for (name, attrs) in config if not leafsBuiltin.get( name ) and not leafsClass.get( name )]
-    else:
-        manyMatches = []
+        def is_many(self, name: str):
+            # Any node which isn't of another kind is assumed to be part one of 'many'
+            return not any([nodes.get(name) for nodes in [self.builtin, self.classes, self.nested]])
 
-    nestedMatches = {name: lift(klass_, section) for (name, section) in config if (klass_ := nested.get( name ))}
+    nodes = Nodes()
+    for p in params:
+        nodes.add(p)
 
-    return klass(**(leafBuiltinMatches | leafClassMatches | nestedMatches | ({ '_many': manyMatches } if len(manyMatches) > 0 else {})))
+    builtin = {name: klass_(attrs) for (name, attrs) in config if (klass_ := nodes.builtin.get( name ))}
+    classes = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := nodes.classes.get( name ))}
+    manys = [nodes.many(**{'_name': name} | attrs) for (name, attrs) in config if nodes.many and nodes.is_many(name)]
+    nested = {name: lift(klass_, section) for (name, section) in config if (klass_ := nodes.nested.get( name ))}
+
+    return klass(**(builtin | classes | nested | ({ '_many': manys } if len(manys) > 0 else {})))

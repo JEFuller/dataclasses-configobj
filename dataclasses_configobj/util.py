@@ -1,4 +1,4 @@
-from typing import List, Type, TypeVar, get_type_hints
+from typing import List, Type, get_type_hints
 
 from typing_inspect import get_args, get_origin
 

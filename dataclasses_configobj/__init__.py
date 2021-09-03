@@ -1,0 +1,1 @@
+from dataclasses_configobj.core import to_spec, lift

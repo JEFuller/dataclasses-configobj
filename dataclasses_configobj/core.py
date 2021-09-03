@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-from inspect import Parameter, signature
-from typing import Optional, Type, TypeVar
+from typing import Optional, Type, TypeVar, get_type_hints
+
 
 import configobj
 from configobj import ConfigObj
@@ -14,36 +14,35 @@ TYPES = {
 }
 
 
-def to_spec(klass):
+def to_spec(klass: Type):
     root = ConfigObj()
 
-    classParams = signature(klass).parameters.values()
-    for classParam in classParams:
-        _to_spec(classParam, root, 1, root)
+    for name, klass_ in get_type_hints(klass).items():
+        _to_spec(name, klass_, root, 1, root)
 
     return root
 
-def _to_spec(classParam, parent, depth, main):
-    name = '__many__' if classParam.name == '_many' else classParam.name
+def _to_spec(name: str, klass: Type, parent, depth, main):
+    name = '__many__' if name == '_many' else name
     section = configobj.Section(parent, depth, main)
     parent[name] = section
 
-    klass = util.list_type(classParam) if classParam.name == '_many' else classParam.annotation 
-    params = [p for p in signature(klass).parameters.items() if p[0] != '_name']
+    klass = util.list_type(klass) if name == '__many__' else klass
+    params = {name_ : klass_ for name_, klass_ in get_type_hints(klass).items() if name_ != '_name' }
 
-    for paramName, param in params:
-        paramType = TYPES.get(param.annotation)
+    for name_, klass_ in params.items():
+        paramType = TYPES.get(klass_)
         if paramType is None:
-            _to_spec(param, section, depth+1, main)
+            _to_spec(name_, klass_, section, depth+1, main)
         else:
-            section.__setitem__(paramName, paramType)
+            section.__setitem__(name_, paramType)
 
     return parent
 
 T = TypeVar('T')
 
 def lift(klass: Type[T], configObject) -> T:
-    params = list(signature(klass).parameters.values())
+    params = get_type_hints(klass)
     config = configObject.items()
 
     @dataclass
@@ -53,27 +52,25 @@ def lift(klass: Type[T], configObject) -> T:
         nested: dict = field(default_factory=dict)
         many: Optional[Type] = None
 
-        def add(self, p: Parameter):
-            name = p.name
-            annotation = p.annotation
+        def add(self, name: str, klass_: Type):
             if name == '_many':
                 if self.many:
-                    raise Exception(f'Can only handle one List per section, but given {self.many} and {annotation}')
-                self.many = util.list_type(p)
-            elif util.is_builtin(annotation):
-                self.builtin[name] = annotation
-            elif not util.has_generic_parameters(annotation):
-                self.classes[name] = annotation
+                    raise Exception(f'Can only handle one List per section, but given {self.many} and {klass_}')
+                self.many = util.list_type(klass_)
+            elif util.is_builtin(klass_):
+                self.builtin[name] = klass_
+            elif not util.has_generic_parameters(klass_):
+                self.classes[name] = klass_
             else:
-                self.nested[name] = annotation
+                self.nested[name] = klass_
 
         def is_many(self, name: str):
             # Any node which isn't of another kind is assumed to be part one of 'many'
             return not any([nodes.get(name) for nodes in [self.builtin, self.classes, self.nested]])
 
     nodes = Nodes()
-    for p in params:
-        nodes.add(p)
+    for name, klass_ in params.items():
+        nodes.add(name, klass_)
 
     builtin = {name: klass_(attrs) for (name, attrs) in config if (klass_ := nodes.builtin.get( name ))}
     classes = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := nodes.classes.get( name ))}

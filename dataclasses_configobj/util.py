@@ -1,16 +1,17 @@
-from inspect import signature
-import typing_inspect
+from typing import List, Type, TypeVar, get_type_hints
 
-def list_type(listT):
+from typing_inspect import get_args, get_origin
+
+def list_type(listT: List):
     """Get the T for a List[T]"""
-    return typing_inspect.get_args(listT.annotation)[0]
+    return get_args(listT)[0]
 
-def is_builtin(klass):
+def is_builtin(klass: Type):
     return klass.__module__ == 'builtins'
 
-def has_generic_parameters(klass):
+def has_generic_parameters(klass: Type):
     if is_builtin(klass):
         return False
     else:
-        parameters = signature(klass).parameters.values()
-        return any([typing_inspect.get_origin(p.annotation) for p in parameters])
+        classes = get_type_hints(klass).values()
+        return any([get_origin(c) for c in classes])

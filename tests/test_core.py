@@ -1,6 +1,6 @@
-from typing import Callable, Dict, List, Type, TypeVar
 import unittest
 from dataclasses import dataclass
+from typing import List, Type, TypeVar
 
 import configobj
 import validate

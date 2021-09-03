@@ -230,3 +230,58 @@ class CoreTestCase(unittest.TestCase):
         root = configobj.ConfigObj(infile=infile, configspec=spec)
         config = core.lift(Config, root)
         self.assertEqual(expectedConfig, config)
+
+
+    def test_lift_3(self):
+
+        @dataclass
+        class Foo:
+            bar: str
+            pip: int
+
+        @dataclass
+        class OneOfMany:
+            _name: str
+            val: str
+
+        @dataclass
+        class Wrapper:
+            test: str
+            foo: Foo
+            _many: List[OneOfMany]
+
+        @dataclass
+        class Config:
+            wrapper: Wrapper
+
+        infile = list(map(str.strip, """\
+        [wrapper]
+        test = yes
+        [[foo]]
+        bar = testing
+        pip = 123
+        [[one]]
+        val = apple
+        [[two]]
+        val = banana\
+        """.split('\n')))
+
+        expectedConfig = Config(
+            wrapper=Wrapper(
+            test='yes',
+            foo=Foo('testing', 123),
+            _many=[
+                OneOfMany(_name = 'one', val = 'apple'),
+                OneOfMany(_name = 'two', val = 'banana')
+            ]
+            )
+        )
+
+
+        spec = core.to_spec(Config)
+        root = configobj.ConfigObj(infile=infile, configspec=spec)
+        vtor = validate.Validator()
+        root.validate(vtor)
+
+        config = core.lift(Config, root)
+        self.assertEqual(expectedConfig, config)

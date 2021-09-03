@@ -47,19 +47,23 @@ def lift(klass: Type[T], configObject) -> T:
     params = list(signature(klass).parameters.values())
     config = configObject.items()
 
-    leafs = {p.name: p.annotation for p in params if p.name != '_many' and not util.has_generic_parameters(p.annotation)}
+    notMany = [p for p in params if p.name != '_many']
+    leafsBuiltin = {p.name: p.annotation for p in notMany if util.is_builtin(p.annotation)}
+    leafsClass = {p.name: p.annotation for p in notMany if not util.is_builtin(p.annotation) and not util.has_generic_parameters(p.annotation)}
     nested = { p.name: p.annotation for p in params if util.has_generic_parameters(p.annotation) }
     manys = [ util.list_type(p) for p in params if p.name == '_many'  ]
 
-    leafMatches = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := leafs.get( name ))}
+    leafBuiltinMatches = {name: klass_(attrs) for (name, attrs) in config if (klass_ := leafsBuiltin.get( name ))}
+    leafClassMatches = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := leafsClass.get( name ))}
+
     if len(manys) > 1:
         raise Exception(f'Can only handle one list per section, but given {manys}')
     elif len(manys) == 1:
         manyClass = manys[0]
-        manyMatches = [manyClass(**{'_name': name} | attrs) for (name, attrs) in config if not leafs.get( name )]
+        manyMatches = [manyClass(**{'_name': name} | attrs) for (name, attrs) in config if not leafsBuiltin.get( name ) and not leafsClass.get( name )]
     else:
         manyMatches = []
 
     nestedMatches = {name: lift(klass_, section) for (name, section) in config if (klass_ := nested.get( name ))}
 
-    return klass(**(leafMatches | nestedMatches | ({ '_many': manyMatches } if len(manyMatches) > 0 else {})))
+    return klass(**(leafBuiltinMatches | leafClassMatches | nestedMatches | ({ '_many': manyMatches } if len(manyMatches) > 0 else {})))

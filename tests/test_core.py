@@ -70,10 +70,14 @@ class CoreTestCase(unittest.TestCase):
 
         @dataclass
         class Config:
+            pip: str
             foo: Foo
             bar: Bar
+            baz: str
 
         expectedSpec = list(map(str.strip, """\
+        pip = string
+        baz = string
         [foo]
         a = string
         [bar]
@@ -81,6 +85,8 @@ class CoreTestCase(unittest.TestCase):
         """.split('\n')))
 
         root = configobj.ConfigObj()
+        root['pip'] = 'string'
+        root['baz'] = 'string'
         foo = configobj.Section(root, 1, root)
         root['foo'] = foo
         foo.__setitem__('a', 'string')

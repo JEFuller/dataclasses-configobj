@@ -3,7 +3,7 @@ from typing import Optional, Type, TypeVar, get_type_hints
 
 
 import configobj
-from configobj import ConfigObj
+from configobj import ConfigObj, Section
 
 import dataclasses_configobj.util as util
 
@@ -24,18 +24,32 @@ def to_spec(klass: Type):
 
 def _to_spec(name: str, klass: Type, parent, depth, main):
     name = '__many__' if name == '_many' else name
-    section = configobj.Section(parent, depth, main)
+    section = Section(parent, depth, main)
     parent[name] = section
 
-    klass = util.list_type(klass) if name == '__many__' else klass
-    params = {name_ : klass_ for name_, klass_ in get_type_hints(klass).items() if name_ != '_name' }
+    paramType = TYPES.get(klass)
+    isSection = paramType is None # i.e. not a built in type
 
-    for name_, klass_ in params.items():
-        paramType = TYPES.get(klass_)
-        if paramType is None:
-            _to_spec(name_, klass_, section, depth+1, main)
-        else:
-            section.__setitem__(name_, paramType)
+    if isSection:
+        klass = util.list_type(klass) if name == '__many__' else klass
+        params = {name_ : klass_ for name_, klass_ in get_type_hints(klass).items() if name_ != '_name' }
+        for name_, klass_ in params.items():
+            paramType_ = TYPES.get(klass_)
+            if paramType_ is None:
+                _to_spec(name_, klass_, section, depth+1, main)
+            else:
+                section.__setitem__(name_, paramType_)
+
+    else:
+        parent.__setitem__(name, paramType)
+
+        areNested = [isinstance(parent.get(s), Section) for s in parent.sections]
+        if any(areNested):
+            ourIdx = parent.sections.index(name)
+            firstNestedIdx = areNested.index(True)
+
+            if ourIdx > firstNestedIdx:
+                parent.sections.insert(firstNestedIdx, parent.sections.pop(ourIdx))
 
     return parent
 

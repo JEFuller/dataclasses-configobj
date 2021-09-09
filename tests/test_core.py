@@ -314,3 +314,48 @@ class CoreTestCase(unittest.TestCase):
         vtor = validate.Validator()
         empty.validate(vtor)
         self.assertEqual(Config('yes', None), core.lift(Config, empty))
+
+
+    def test_readme_example(self):
+        @dataclass
+        class Single:
+            other: str
+
+        @dataclass
+        class OneOfMany:
+            _name: str
+            val: str
+
+        @dataclass
+        class Config:
+            single: Single
+            _many: List[OneOfMany]
+            optional: Optional[str] = None
+
+
+        infile = list(map(str.strip, """\
+        [single]
+        other = hello
+        [one]
+        val = apple
+        [two]
+        val = banana\
+        """.split('\n')))
+
+        spec = core.to_spec(Config)
+        root = configobj.ConfigObj(infile=infile, configspec=spec)
+
+        validator = validate.Validator()
+        root.validate(validator)
+        
+        expectedConfig = Config(
+            single=Single(other='hello'),
+            optional=None,
+            _many=[
+                OneOfMany(_name='one', val='apple'),
+                OneOfMany(_name='two', val='banana')
+            ]
+        )
+
+        config: Config = core.lift(Config, root)
+        self.assertEqual(expectedConfig, config)

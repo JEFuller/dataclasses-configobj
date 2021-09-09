@@ -31,11 +31,12 @@ class OneOfMany:
 class Config:
     single: Single
     _many: List[OneOfMany]
+    optional: Optional[str] = None
 ```
 
 To load this `.ini` file:
 
-```toml
+```
 [single]
 other = hello
 [one]
@@ -46,22 +47,23 @@ val = banana
 
 We can read, validate, and `lift` to an instance of `Config` with:
 
-```python
-from dataclasses_configobj import to_spec, lift
+```pythonfrom dataclasses_configobj import lift, to_specj import to_spec, lift
+
 
 spec = core.to_spec(Config)
-configobj = configobj.ConfigObj(infile=infile, configspec=spec)
+co = configobj.ConfigObj(infile=infile, configspec=spec)
 
 validator = validate.Validator()
-configobj.validate(validator)
+co.validate(validator)
 
-config: Config = core.lift(Config, root)
+config: Config = dataclasses.lift(Config, co)
 ```
 
 To yield `config`:
 ```
 Config(
     single=Single(other='hello'),
+    optional=None,
     _many=[
         OneOfMany(_name='one', val='apple'),
         OneOfMany(_name='two', val='banana')

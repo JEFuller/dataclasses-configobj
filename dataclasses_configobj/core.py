@@ -12,7 +12,7 @@ TYPES = {
 
 
 def to_spec(klass: Type):
-    root = ConfigObj()
+    root = ConfigObj(_inspec=True, raise_errors=True, file_error=True)
 
     for name, klass_ in get_type_hints(klass).items():
         _to_spec(name, klass_, root, 1, root)
@@ -22,8 +22,6 @@ def to_spec(klass: Type):
 
 def _to_spec(name: str, klass: Type, parent, depth, main) -> None:
     name = '__many__' if name == '_many' else name
-    section = Section(parent, depth, main)
-    parent[name] = section
 
     isOptional = get_origin(klass) == Union and get_args(klass)[1] == type(None)
     if isOptional or name == '__many__':
@@ -32,6 +30,9 @@ def _to_spec(name: str, klass: Type, parent, depth, main) -> None:
     paramType = TYPES.get(klass)
 
     if paramType is None: # not a built in (or optional) type
+        section = Section(parent, depth, main)
+        parent[name] = section
+
         params = {name_ : klass_ for name_, klass_ in get_type_hints(klass).items() if name_ != '_name' }
         for name_, klass_ in params.items():
             paramType_ = TYPES.get(klass_)
@@ -44,15 +45,6 @@ def _to_spec(name: str, klass: Type, parent, depth, main) -> None:
     # is a built in type
     parent.__setitem__(name, paramType + ('(default=None)' if isOptional else ''))
 
-    areNested = [isinstance(parent.get(s), Section) for s in parent.sections]
-    if any(areNested):
-        ourIdx = parent.sections.index(name)
-        firstNestedIdx = areNested.index(True)
-
-        if ourIdx > firstNestedIdx:
-            parent.sections.insert(firstNestedIdx, parent.sections.pop(ourIdx))
-
-
 T = TypeVar('T')
 
 def lift(klass: Type[T], configObject) -> T:
@@ -62,7 +54,7 @@ def lift(klass: Type[T], configObject) -> T:
     @dataclass
     class Nodes:
         many: Optional[Type] = None
-        builtin: dict = field(default_factory=dict)
+        scalars: dict = field(default_factory=dict)
         classes: dict = field(default_factory=dict)
         nested: dict = field(default_factory=dict)
 
@@ -72,9 +64,9 @@ def lift(klass: Type[T], configObject) -> T:
                     raise Exception(f'Can only handle one List per section, but given {self.many} and {klass_}')
                 self.many = get_args(klass_)[0]
             elif klass_.__module__ == 'builtins':
-                self.builtin[name] = klass_
+                self.scalars[name] = klass_
             elif get_origin(klass_) == Union and get_args(klass_)[1] == type(None):
-                self.builtin[name] = get_args(klass_)[0]
+                self.scalars[name] = get_args(klass_)[0]
             elif all([c.__module__ == 'builtins' for c in get_type_hints(klass_).values()]):
                 self.classes[name] = klass_
             else:
@@ -82,13 +74,13 @@ def lift(klass: Type[T], configObject) -> T:
 
         def is_many(self, name: str):
             # Any node which isn't of another kind is assumed to be part one of 'many'
-            return not any([nodes.get(name) for nodes in [self.builtin, self.classes, self.nested]])
+            return not any([nodes.get(name) for nodes in [self.scalars, self.classes, self.nested]])
 
     nodes = Nodes()
     for name, klass_ in params.items():
         nodes.add(name, klass_)
 
-    builtin = {name: None if attrs is None else klass_(attrs) for (name, attrs) in config if (klass_ := nodes.builtin.get( name ))}
+    builtin = {name: None if attrs is None else klass_(attrs) for (name, attrs) in config if (klass_ := nodes.scalars.get( name ))}
     classes = {name: klass_(**attrs) for (name, attrs) in config if (klass_ := nodes.classes.get( name ))}
     manys = [nodes.many(**{'_name': name} | attrs) for (name, attrs) in config if nodes.many and nodes.is_many(name)]
     nested = {name: lift(klass_, section) for (name, section) in config if (klass_ := nodes.nested.get( name ))}

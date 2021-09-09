@@ -295,7 +295,7 @@ class CoreTestCase(unittest.TestCase):
         @dataclass
         class Config:
             required: str
-            optional: Optional[str]
+            optional: Optional[str] = None
 
         expectedSpec = list(map(str.strip, """\
         required = string
@@ -310,8 +310,7 @@ class CoreTestCase(unittest.TestCase):
         here.validate(vtor)
         self.assertEqual(Config('yes', 'here'), core.lift(Config, here))
 
-        # TODO not sure why need spec.write() here, fails when passing just spec
-        empty = configobj.ConfigObj(infile= ["required = yes"], configspec=spec.write())
+        empty = configobj.ConfigObj(infile= ["required = yes"], configspec=spec)
         vtor = validate.Validator()
         empty.validate(vtor)
         self.assertEqual(Config('yes', None), core.lift(Config, empty))

@@ -1,11 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Optional, Type, TypeVar, get_type_hints
 
-
-import configobj
 from configobj import ConfigObj, Section
-
-import dataclasses_configobj.util as util
+from typing_inspect import get_args, get_origin
 
 # Based on https://github.com/DiffSK/configobj/blob/v5.0.6//validate.py#L1250
 TYPES = {
@@ -31,7 +28,7 @@ def _to_spec(name: str, klass: Type, parent, depth, main):
     isSection = paramType is None # i.e. not a built in type
 
     if isSection:
-        klass = util.list_type(klass) if name == '__many__' else klass
+        klass = get_args(klass)[0] if name == '__many__' else klass
         params = {name_ : klass_ for name_, klass_ in get_type_hints(klass).items() if name_ != '_name' }
         for name_, klass_ in params.items():
             paramType_ = TYPES.get(klass_)
@@ -61,19 +58,19 @@ def lift(klass: Type[T], configObject) -> T:
 
     @dataclass
     class Nodes:
-        builtin: dict = field(default_factory= dict)
+        many: Optional[Type] = None
+        builtin: dict = field(default_factory=dict)
         classes: dict = field(default_factory=dict)
         nested: dict = field(default_factory=dict)
-        many: Optional[Type] = None
 
         def add(self, name: str, klass_: Type):
             if name == '_many':
                 if self.many:
                     raise Exception(f'Can only handle one List per section, but given {self.many} and {klass_}')
-                self.many = util.list_type(klass_)
-            elif util.is_builtin(klass_):
+                self.many = get_args(klass_)[0]
+            elif klass_.__module__ == 'builtins':
                 self.builtin[name] = klass_
-            elif not util.has_generic_parameters(klass_):
+            elif all([c.__module__ == 'builtins' for c in get_type_hints(klass_).values()]):
                 self.classes[name] = klass_
             else:
                 self.nested[name] = klass_

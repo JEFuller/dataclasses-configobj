@@ -1,6 +1,6 @@
 import unittest
 from dataclasses import dataclass
-from typing import List, Type, TypeVar
+from typing import List, Optional, Type, TypeVar
 
 import configobj
 import validate

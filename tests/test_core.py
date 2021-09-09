@@ -148,7 +148,6 @@ class CoreTestCase(unittest.TestCase):
         spec = core.to_spec(Config)
         self.assertEqual(expectedSpec, spec.write())
 
-
     def test_type(self):
         T = TypeVar('T')
 
@@ -291,3 +290,28 @@ class CoreTestCase(unittest.TestCase):
 
         config = core.lift(Config, root)
         self.assertEqual(expectedConfig, config)
+
+    def test_optional_root(self):
+        @dataclass
+        class Config:
+            required: str
+            optional: Optional[str]
+
+        expectedSpec = list(map(str.strip, """\
+        required = string
+        optional = string(default=None)\
+        """.split('\n')))
+
+        spec = core.to_spec(Config)
+        self.assertEqual(expectedSpec, spec.write())
+
+        here = configobj.ConfigObj(infile= ["required = yes", "optional = here"], configspec=spec)
+        vtor = validate.Validator()
+        here.validate(vtor)
+        self.assertEqual(Config('yes', 'here'), core.lift(Config, here))
+
+        # TODO not sure why need spec.write() here, fails when passing just spec
+        empty = configobj.ConfigObj(infile= ["required = yes"], configspec=spec.write())
+        vtor = validate.Validator()
+        empty.validate(vtor)
+        self.assertEqual(Config('yes', None), core.lift(Config, empty))

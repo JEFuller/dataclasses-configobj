@@ -1,4 +1,4 @@
-from dataclasses import Field, dataclass, field, fields, is_dataclass
+from dataclasses import Field, dataclass, field, fields, is_dataclass, _MISSING_TYPE
 from typing import Optional, Type, TypeVar, Union, get_type_hints
 
 from configobj import ConfigObj, Section
@@ -49,7 +49,13 @@ def _to_spec(field: Field, parent, depth, main) -> None:
         return
 
     # is a built in type
-    parent.__setitem__(name, paramType + ('(default=None)' if isOptional else ''))
+    if isOptional:
+        paramType += '(default=None)'
+
+    elif not isinstance(field.default, _MISSING_TYPE):
+        paramType += f"(default='{field.default}')"
+
+    parent.__setitem__(name, paramType)
 
 T = TypeVar('T')
 

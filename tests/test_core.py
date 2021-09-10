@@ -315,6 +315,31 @@ class CoreTestCase(unittest.TestCase):
         empty.validate(vtor)
         self.assertEqual(Config('yes', None), core.lift(Config, empty))
 
+    def test_default_root(self):
+        @dataclass
+        class Config:
+            required: str
+            optional: str = 'defaultvalue'
+
+        expectedSpec = list(map(str.strip, """\
+        required = string
+        optional = string(default='defaultvalue')\
+        """.split('\n')))
+
+        spec = core.to_spec(Config)
+        self.assertEqual(expectedSpec, spec.write())
+
+        here = configobj.ConfigObj(infile= ["required = yes", "optional = here"], configspec=spec)
+        vtor = validate.Validator()
+        here.validate(vtor)
+        self.assertEqual(Config('yes', 'here'), core.lift(Config, here))
+
+        empty = configobj.ConfigObj(infile= ["required = yes"], configspec=spec)
+        vtor = validate.Validator()
+        empty.validate(vtor)
+        self.assertEqual(Config('yes', 'defaultvalue'), core.lift(Config, empty))
+
+
 
     def test_readme_example(self):
         @dataclass

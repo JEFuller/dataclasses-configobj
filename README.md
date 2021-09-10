@@ -32,6 +32,7 @@ class Config:
     single: Single
     _many: List[OneOfMany]
     optional: Optional[str] = None
+    withdefault: str = 'test123'
 ```
 
 To load this `.ini` file:
@@ -47,8 +48,8 @@ val = banana
 
 We can read, validate, and `lift` to an instance of `Config` with:
 
-```pythonfrom dataclasses_configobj import lift, to_specj import to_spec, lift
-
+```python
+from dataclasses_configobj import lift, to_spec
 
 spec = core.to_spec(Config)
 co = configobj.ConfigObj(infile=infile, configspec=spec)

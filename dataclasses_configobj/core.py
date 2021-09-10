@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import Field, dataclass, field, fields, is_dataclass
 from typing import Optional, Type, TypeVar, Union, get_type_hints
 
 from configobj import ConfigObj, Section
@@ -11,18 +11,22 @@ TYPES = {
 }
 
 
-def to_spec(klass: Type):
+def to_spec(dataclass: Type):
+    if not is_dataclass(dataclass):
+        raise ValueError(f"'{dataclass.__class__.__name__}' is not a dataclass")
+
     root = ConfigObj(_inspec=True, raise_errors=True, file_error=True)
 
-    for name, klass_ in get_type_hints(klass).items():
-        _to_spec(name, klass_, root, 1, root)
+    for field in fields(dataclass):
+        _to_spec(field, root, 1, root)
 
     return root
 
 
-def _to_spec(name: str, klass: Type, parent, depth, main) -> None:
-    name = '__many__' if name == '_many' else name
+def _to_spec(field: Field, parent, depth, main) -> None:
+    name = '__many__' if field.name == '_many' else field.name
 
+    klass: Type  = field.type
     isOptional = get_origin(klass) == Union and get_args(klass)[1] == type(None)
     if isOptional or name == '__many__':
         klass = get_args(klass)[0] 
@@ -33,11 +37,13 @@ def _to_spec(name: str, klass: Type, parent, depth, main) -> None:
         section = Section(parent, depth, main)
         parent[name] = section
 
-        params = {name_ : klass_ for name_, klass_ in get_type_hints(klass).items() if name_ != '_name' }
-        for name_, klass_ in params.items():
-            paramType_ = TYPES.get(klass_)
+        for field_ in fields(klass):
+            if (name_ := field_.name) == '_name':
+                continue
+
+            paramType_ = TYPES.get(field_.type)
             if paramType_ is None:
-                _to_spec(name_, klass_, section, depth+1, main)
+                _to_spec(field_, section, depth+1, main)
             else:
                 section.__setitem__(name_, paramType_)
         return

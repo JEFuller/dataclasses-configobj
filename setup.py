@@ -8,7 +8,7 @@ with open(os.path.join(HERE, "README.md")) as fid:
 
 setup(
     name="dataclasses-configobj",
-    version="0.0.3",
+    version="0.0.4",
     description="Easily deserialize Data Classes from ini files",
     long_description=README,
     long_description_content_type="text/markdown",

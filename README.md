@@ -64,6 +64,7 @@ To yield `config`:
 Config(
     single=Single(other='hello'),
     optional=None,
+    withdefault='test123'
     _many=[
         OneOfMany(_name='one', val='apple'),
         OneOfMany(_name='two', val='banana')

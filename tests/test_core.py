@@ -356,6 +356,7 @@ class CoreTestCase(unittest.TestCase):
             single: Single
             _many: List[OneOfMany]
             optional: Optional[str] = None
+            withdefault: str = 'test123'
 
 
         infile = list(map(str.strip, """\
@@ -376,6 +377,7 @@ class CoreTestCase(unittest.TestCase):
         expectedConfig = Config(
             single=Single(other='hello'),
             optional=None,
+            withdefault='test123',
             _many=[
                 OneOfMany(_name='one', val='apple'),
                 OneOfMany(_name='two', val='banana')

@@ -49,15 +49,17 @@ val = banana
 We can read, validate, and `lift` to an instance of `Config` with:
 
 ```python
+from configobj import ConfigObj
 from dataclasses_configobj import lift, to_spec
+from validate import Validator
 
-spec = core.to_spec(Config)
-co = configobj.ConfigObj(infile=infile, configspec=spec)
+spec = to_spec(Config)
+co = ConfigObj(infile=infile, configspec=spec)
 
-validator = validate.Validator()
+validator = Validator()
 co.validate(validator)
 
-config: Config = dataclasses.lift(Config, co)
+config: Config = lift(Config, co)
 ```
 
 To yield `config`:

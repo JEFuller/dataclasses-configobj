@@ -291,7 +291,7 @@ class CoreTestCase(unittest.TestCase):
         config = core.lift(Config, root)
         self.assertEqual(expectedConfig, config)
 
-    def test_optional_root(self):
+    def test_optional_root_str(self):
         @dataclass
         class Config:
             required: str
@@ -315,7 +315,7 @@ class CoreTestCase(unittest.TestCase):
         empty.validate(vtor)
         self.assertEqual(Config('yes', None), core.lift(Config, empty))
 
-    def test_default_root(self):
+    def test_default_root_str(self):
         @dataclass
         class Config:
             required: str
@@ -338,6 +338,36 @@ class CoreTestCase(unittest.TestCase):
         vtor = validate.Validator()
         empty.validate(vtor)
         self.assertEqual(Config('yes', 'defaultvalue'), core.lift(Config, empty))
+
+    def test_optional_root_class(self):
+        @dataclass
+        class Foo:
+            bar: str
+
+        @dataclass
+        class Config:
+            required: str
+            foo: Optional[Foo] = None
+
+        expectedSpec = list(map(str.strip, """\
+        required = string
+        [__optional__foo]
+        bar = string\
+        """.split('\n')))
+
+        spec = core.to_spec(Config)
+        self.assertEqual(expectedSpec, spec.write())
+
+        missing = configobj.ConfigObj(infile= ["required = yes"], configspec=spec)
+        vtor = validate.Validator()
+        res = missing.validate(vtor)
+        self.assertEqual(Config(required='yes'), core.lift(Config, missing))
+
+        here = configobj.ConfigObj(infile= ["required = yes", "[foo]", "bar = hello"], configspec=spec)
+        vtor = validate.Validator()
+        res = here.validate(vtor)
+        self.assertEqual(Config(required='yes', foo=Foo(bar='hello')), core.lift(Config, here))
+
 
 
 

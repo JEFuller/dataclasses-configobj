@@ -35,6 +35,7 @@ def _to_spec(field: Field, parent, depth, main) -> None:
 
     if paramType is None: # not a built in (or optional) type
         section = Section(parent, depth, main)
+        name = f'__optional__{name}' if isOptional else name
         parent[name] = section
 
         for field_ in fields(klass):
@@ -78,7 +79,12 @@ def lift(klass: Type[T], configObject) -> T:
             elif klass_.__module__ == 'builtins':
                 self.scalars[name] = klass_
             elif get_origin(klass_) == Union and get_args(klass_)[1] == type(None):
-                self.scalars[name] = get_args(klass_)[0]
+                optional = get_args(klass_)[0]
+                if optional.__module__ == 'builtins':
+                    self.scalars[name] = optional
+                else:
+                    self.classes[name] = optional
+
             elif all([c.__module__ == 'builtins' for c in get_type_hints(klass_).values()]):
                 self.classes[name] = klass_
             else:

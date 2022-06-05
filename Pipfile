@@ -7,7 +7,7 @@ verify_ssl = true
 twine = "3.4.2"
 
 [packages]
-configobj = "5"
+configobj = {editable = true, ref = "v5.0.6-add-optional-sections", git = "https://github.com/JEFuller/configobj.git"}
 typing-inspect = "*"
 
 [requires]
